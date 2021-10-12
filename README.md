@@ -36,21 +36,26 @@ This code has been run, as is, on Mac OS and Ubuntu, producing identical results
 
 ### Python
 
-Python3 has been used when developing and running the models herein. The version supplied with the model in the competition was 3.5, but this has been tested with 3.6 as well giving the same results.  
+Python3 has been used when developing and running the models herein. The version supplied with the model in the competition was 3.5, but this has been tested with both 3.6 and 3.8 as well giving the same results. The updated tensorflow 2 version has only been tested with 3.8. 
   
 These are the modules and versions that were used when running the code.  
   
-* scikit-image==0.14.1
-* tensorflow==1.4.1
-* numpy==1.15.4
+* scikit-image==0.18.3
+* tensorflow==2.3.0
+* numpy==1.18.5
 * h5py==2.8.0
   
 This is also included in the requirements.txt file that can be used with pip or pipenv to create the necessary environment to run the code in. 
 
 ### FFmpeg 
 
-This code has been tested with FFmpeg version 3.2.2 and 4.1.1. The FFmpeg executeable must be included in the path variable for this code to run. Try running `ffmpeg -h` in a terminal, on your device, to see if you have the application in your path. 
+This code has been tested with FFmpeg version 3.2.2, 4.1.1 and 4.4. The FFmpeg executeable must be included in the path variable for this code to run. Try running `ffmpeg -h` in a terminal, on your device, to see if you have the application in your path. 
 
 ### Big Buck Bunny clip
 
 The included and heavily encoded video file is an 8s clip taken from the Big Buck Bunny movie, created by the Blender organization. The source material can be found on www.blender.org. 
+
+# Update report
+
+This repository was updated from tensorflow 1.4.1 to 2.3.0. To verify that this did not change the behavior of the model, a number of tests and comparisons was performed. No difference was found on the MOS level and only negligible differences where found on the interim predictions. See a more detailed report in the "Upgrade report"-directory. 
+

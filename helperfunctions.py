@@ -95,7 +95,7 @@ def frame_extraction(video_object, extracted_fps, video_duration, depth, pixfmt,
             nr_added_frames += 1
 
         frameiter += 1
-        if nr_added_frames == 96:
+        if nr_added_frames == nr_frames_to_extract:
             yuv = []
             framesNeeded = False
             break
