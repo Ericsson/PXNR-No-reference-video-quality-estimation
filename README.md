@@ -55,7 +55,7 @@ This code has been tested with FFmpeg version 3.2.2, 4.1.1 and 4.4. The FFmpeg e
 
 The included and heavily encoded video file is an 8s clip taken from the Big Buck Bunny movie, created by the Blender organization. The source material can be found on www.blender.org. 
 
-# Update report
+# Upgrade
 
-This repository was updated from tensorflow 1.4.1 to 2.3.0. To verify that this did not change the behavior of the model, a number of tests and comparisons was performed. No difference was found on the MOS level and only negligible differences where found on the interim predictions. See a more detailed report in the "Upgrade report"-directory. 
+This repository was upgraded from tensorflow 1.4.1 to 2.3.0. To verify that this did not change the behavior of the model, a number of tests and comparisons was performed. No difference was found on the MOS level and only negligible differences where found on the interim predictions. See a more detailed report in the "Upgrade report"-directory. 
 
