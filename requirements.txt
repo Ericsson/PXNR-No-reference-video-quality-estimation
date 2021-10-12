@@ -1,4 +1,4 @@
 scikit-image==0.18.3
-tensorflow==2.3.0
+tensorflow==2.5.1
 numpy==1.18.5
 h5py==2.8.0
