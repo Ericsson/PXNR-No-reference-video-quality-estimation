@@ -1,6 +1,6 @@
 # Upgrade report
 
-Zero changes were needed in this code to go from Tensorflow 1.4.1 (v1) to 2.3.0 (v2). The code was tested on an Nvidia 2060 GTX card with CUDA 11.0 installed. Both the MOS output scores were compared between v1 and v2, but also the "predictions" array that is created on line 56 in the `PXNR-model.py` script. This is, for historical reasons, formatted as an 1x96x85x1 array that can be viewed as a 96x85 pixel black and white image. The "predictions" array was stored in a deepdish file and examples of these for v1 and v2 can be found in the dd_files directory. These were calculated from the BigBuckBunny-example included in the repository. The `.dd` files can be read by loading them using deepdish in python with something like:
+Zero changes were needed in this code to go from Tensorflow 1.4.1 (v1) to 2.6.0 (v2). The code was tested on an Nvidia 2060 GTX card with CUDA 11.0 installed. Both the MOS output scores were compared between v1 and v2, but also the "predictions" array that is created on line 56 in the `PXNR-model.py` script. This is, for historical reasons, formatted as an 1x96x85x1 array that can be viewed as a 96x85 pixel black and white image. The "predictions" array was stored in a deepdish file and examples of these for v1 and v2 can be found in the dd_files directory. These were calculated from the BigBuckBunny-example included in the repository. The `.dd` files can be read by loading them using deepdish in python with something like:
 
 ```python
 import deepdish as dd
@@ -13,7 +13,7 @@ Analysis in the form of SSIM and MSE was done on these "images". The differences
 
 | Id | Meta | Execution time(v1) | Execution time (v2) | Mos score (v1) | Mos score (v2) | dSsim = 1-ssim  | MSE |
 | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| 1 (BBB) | 30 fps and 8 sec | 774.292 | 784.880 | 2.518 | 2.518 | 4.875e-12 | 1.495e-10 |
+| 1 (BBB) | 30 fps and 8 sec | 774.292 | 784.880 | 2.518 | 2.518 | 4.931e-10 | 1.393e-08 |
 | 2 | 24 fps and 653 sec | 2550.662 | 2940.864 | 4.091 | 4.091 | 3.136e-12 | 1.121e-10 |
 | 3 | 24 fps and 464 sec | 2035.643 | 2078.847 | 3.716 | 3.716 | 8.799e-13 | 5.117e-11 |
 | 4 | 24 fps and 734 sec | 2711.327 | 2812.047 | 3.386 | 3.386 | 1.158e-12 | 6.511e-11 |

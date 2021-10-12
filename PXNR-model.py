@@ -7,7 +7,7 @@ __author__    = "Sebastian Emmot, Maciej Pedzisz, David Lindero, Samuel Chambers
 __contact__   = "david.lindero@ericsson.com"
 __copyright__ = "Copyright (c) 2018 Ericsson"
 __date__      = "2018-04-10"
-__status__    = "ITU-Submission ready, updated to Tensorflow 2.3"
+__status__    = "ITU-Submission ready, updated to Tensorflow 2.6"
 
 
 """

@@ -41,9 +41,9 @@ Python3 has been used when developing and running the models herein. The version
 These are the modules and versions that were used when running the code.  
   
 * scikit-image==0.18.3
-* tensorflow==2.3.0
-* numpy==1.18.5
-* h5py==2.8.0
+* tensorflow==2.6.0
+* numpy==1.19.5
+* h5py==3.1.0
   
 This is also included in the requirements.txt file that can be used with pip or pipenv to create the necessary environment to run the code in. 
 
@@ -57,5 +57,5 @@ The included and heavily encoded video file is an 8s clip taken from the Big Buc
 
 # Upgrade
 
-This repository was upgraded from tensorflow 1.4.1 to 2.3.0. To verify that this did not change the behavior of the model, a number of tests and comparisons was performed. No difference was found on the MOS level and only negligible differences where found on the interim predictions. See a more detailed report in the "Upgrade report"-directory. 
+This repository was upgraded from tensorflow 1.4.1 to 2.6.0. To verify that this did not change the behavior of the model, a number of tests and comparisons was performed. No difference was found on the MOS level and only negligible differences where found on the interim predictions. See a more detailed report in the "Upgrade report"-directory. 
 
