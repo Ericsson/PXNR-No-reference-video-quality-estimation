@@ -3,6 +3,7 @@ import sys
 import signal
 import subprocess
 import numpy as np
+import errno
 
 
 __author__    = "Sebastian Emmot, Maciej Pedzisz, David Lindero, Samuel Chambers"
@@ -178,7 +179,7 @@ class YUVSourceFFmpeg(VideoSource):
             on_posix = 'posix' in sys.builtin_module_names
             self._process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=(10**8), close_fds=on_posix)
         except OSError as e:
-            if e.errno == os.errno.ENOENT:
+            if e.errno == errno.ENOENT:
                 print("\nI/O error calling 'ffmpeg' to decode input video file/stream.\n")
                 sys.exit(1)
             else:

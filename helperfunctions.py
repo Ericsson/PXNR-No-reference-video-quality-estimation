@@ -1,7 +1,9 @@
 import math
 import numpy as np
 import matrix_utils
-
+import tensorflow as tf
+import time
+import h5py
 
 __author__    = "Sebastian Emmot, Maciej Pedzisz, David Lindero, Samuel Chambers"
 __contact__   = "david.lindero@ericsson.com"
@@ -24,11 +26,17 @@ stream. This function, together with the image_quadification function from matri
 also takes care of the scaling and splitting up of the full-resolution frames into subframes.
 """
 
-
 def get_lr_metric(optimizer):
     def lr(y_true, y_pred):
         return optimizer.lr
     return lr
+
+
+image_model_location = "./model_coefficients/image_model.h5"
+optimizer = tf.keras.optimizers.Adadelta()
+lr_rate_metric = get_lr_metric(optimizer)
+mapping = {"lr": lr_rate_metric}
+image_model = tf.keras.models.load_model(image_model_location, compile=False, custom_objects=mapping)
 
 
 def yuv2RGB(yuv, depth, pixfmt):
@@ -81,6 +89,8 @@ def frame_extraction(video_object, extracted_fps, video_duration, depth, pixfmt,
     frameiter = 0
     nr_added_frames = 0
 
+    frame_predictions = []
+    beforetime = time.time()
     result = []
     while framesNeeded:
         yuv = video_object.loadFrame()
@@ -90,15 +100,23 @@ def frame_extraction(video_object, extracted_fps, video_duration, depth, pixfmt,
             rgb = yuv2RGB(yuv, depth, pixfmt)
             yuv = []
             # Creating all subframes for this full-size-image
-            result.extend(matrix_utils.image_quadification(rgb, quad_depth, "rgb", image_dims))
+            currquad = matrix_utils.image_quadification(rgb, quad_depth, "rgb", image_dims)
+            reshaped_currquad = np.reshape(np.asarray(currquad), newshape=(num_slice_frames, 270, 480, 3)) 
+            predictions_for_currquad = image_model.predict(reshaped_currquad, batch_size=8, verbose=0)
+            reshaped_currquad = []
+            frame_predictions.extend(predictions_for_currquad)
             rgb = []
             nr_added_frames += 1
+            # print('per frame time:')
+            # print(time.time()-beforetime)
+            beforetime = time.time()
 
         frameiter += 1
         if nr_added_frames == nr_frames_to_extract:
             yuv = []
             framesNeeded = False
             break
-    result = np.reshape(np.asarray(result), newshape=(nr_added_frames*num_slice_frames, 270, 480, 3))
 
-    return result
+    frame_pred_results = np.reshape(frame_predictions, (1, nr_frames_to_extract, 85, 1))
+
+    return frame_pred_results
