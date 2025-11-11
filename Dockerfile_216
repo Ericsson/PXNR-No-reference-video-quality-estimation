@@ -1,38 +1,21 @@
 FROM tensorflow/tensorflow:2.18.0
-
-RUN mkdir /opt/ffmpeg/
-COPY ffmpeg-git-amd64-static.tar.xz /opt/ffmpeg/
+RUN mkdir -p /opt/ffmpeg/
 WORKDIR /opt/ffmpeg/
-RUN tar xvf ffmpeg*.xz
-#WORKDIR /opt/ffmpeg/ffmpeg-7.1
-RUN ln -s "/opt/ffmpeg/ffmpeg-git-20240629-amd64-static/ffmpeg" /usr/local/bin/
-RUN ln -s "/opt/ffmpeg/ffmpeg-git-20240629-amd64-static/ffprobe" /usr/local/bin/
+
+RUN apt-get update && apt-get install -y wget xz-utils && \
+    wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz && \
+    tar xvf ffmpeg-git-amd64-static.tar.xz && \
+    ln -s /opt/ffmpeg/ffmpeg-git-*-amd64-static/ffmpeg /usr/local/bin/ffmpeg && \
+    ln -s /opt/ffmpeg/ffmpeg-git-*-amd64-static/ffprobe /usr/local/bin/ffprobe && \
+    rm ffmpeg-git-amd64-static.tar.xz && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /resources/
 COPY ./new_requirements.txt /resources/requirements.txt
 RUN python3 -m pip install -r /resources/requirements.txt
-#RUN apt-get update
 
 COPY *.py /resources/ 
 COPY ./model_coefficients /resources/model_coefficients
 
 WORKDIR /resources/
-
-# Update package lists and install dependencies
-#RUN apt-get update && apt-get install -y \
-#    software-properties-common \
-#    #python3 \
-#    #python3-pip \
-#    #python3-apt \
-#    apt-transport-https \
-#    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-
-# Ensure the apt_pkg module is available by fixing Python paths
-#RUN ln -s /usr/lib/python3/dist-packages/apt_pkg.cpython-*.so /usr/lib/python3/apt_pkg.so
-
-#RUN add-apt-repository ppa:ubuntuhandbook1/ffmpeg7
-#RUN apt-get update
-#RUN apt-get -y install ffmpeg
-
 
