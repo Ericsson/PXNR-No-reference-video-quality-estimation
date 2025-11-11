@@ -9,6 +9,7 @@ import re
 import os
 import subprocess
 import uuid
+import time
 
 
 __author__    = "Sebastian Emmot, Maciej Pedzisz, David Lindero, Samuel Chambers, Rohit Rentala"
@@ -22,6 +23,8 @@ def extract_framerate(filename):
     match = re.search(r"_(\d+)hz", filename)
     if match:
         framerate = int(match.group(1))
+    else:
+        framerate = 60
     return framerate
 
 
@@ -59,7 +62,7 @@ def main():
     # video = './BigBuckBunny_8s_clip.mp4'
     video = pvs_path
     video_model_location = "./model_coefficients/video_model.h5"
-    output_path = '/proj/pnats-video-proc/gamingvideos/ETRI_LIVE/pxnrlogs/'
+    output_path = './'
 
     """
     Sample variables, should be extracted from input video file. One way to get this
@@ -68,6 +71,7 @@ def main():
     fps = extract_framerate(os.path.basename(video))
 
     full_pix_fmt = 'yuv420p10le'  # pixel format
+    full_pix_fmt = 'yuv422p'
     video_duration = 5.0  # in seconds
 
     depth = 8  # bits per pixel/channel
@@ -86,9 +90,13 @@ def main():
     # tmp_pvs_name = f'/tmp/{pvs_base_name}_{uuid_value}.mp4'
 
     tempvideopath = f'/tmp/tempvideopath_{uuid_value}.mp4'
-    cmd_line = f'ffmpeg -s 3840x2160 -r {fps} -pix_fmt {full_pix_fmt} -i {video} -c:v libx265 -x265-params lossless=1 -r {fps} {tempvideopath}'
+    # cmd_line = f'ffmpeg -s 3840x2160 -r {fps} -pix_fmt {full_pix_fmt} -i {video} -c:v libx265 -x265-params lossless=1 -r {fps} {tempvideopath}'
+    cmd_line = f'ffmpeg -i {video} -c:v libx265 -x265-params lossless=1 -r {fps} {tempvideopath}'
+    print(cmd_line)
     dec_ret, dec_out, dec_err = shell_call(cmd_line)
+    print(dec_ret, dec_out, dec_err)
 
+    starttime_model = time.time()
     vsource = YUVSourceFFmpeg(tempvideopath, 3840, 2160, fps, depth, short_pixfmt, True)
 
     nr_of_batches = 1  # this code was prepared to run for several batches as well, this is a remnant of that
@@ -103,7 +111,10 @@ def main():
     print('Final ouput of {video} is \nMOS: {final_pred}'.format(**locals()))
     output_file = output_path + os.path.basename(video) + '.txt'
     with open(output_file, "w+") as file:
-        file.write(f'{video}: {final_pred}')
+        file.write(f'{video}: {final_pred}\n')
+
+    endtime_model = time.time() - starttime_model
+    print(f'Time: {endtime_model}s')
 
 
 if __name__ == "__main__":
