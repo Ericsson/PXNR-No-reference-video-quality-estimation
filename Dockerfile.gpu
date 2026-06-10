@@ -9,8 +9,7 @@
 # driver into the container. No system CUDA toolkit is needed in the image.
 #
 # Build:  ./build.sh gpu
-# Run:    docker run --rm --gpus all -v "$PWD/data:/data" pxnr:gpu \
-#             python -u run_pxnr_on_file.py /data/clip_30hz.mp4
+# Run:    docker run --rm --gpus all -v "$PWD/data:/data" pxnr:gpu /data/clip_30hz.mp4
 #
 # This extra has no arm64 build, so this image is amd64-only (the CPU
 # Dockerfile remains the multi-arch / Apple-Silicon path).
@@ -46,3 +45,8 @@ RUN cd /resources/model_coefficients && \
     rm -f image_model.h5.7z.*
 
 WORKDIR /resources/
+
+# Same single-purpose CLI as the CPU image: pass the input video as a positional
+# argument. The predicted MOS is printed as JSON on stdout, diagnostics on stderr.
+#   docker run --rm --gpus all -v "$PWD/clip.mp4:/data/in.mp4" pxnr:gpu /data/in.mp4
+ENTRYPOINT ["python3", "/resources/PXNR-model.py"]

@@ -37,10 +37,10 @@ class VideoSource:
 
         if os.path.exists(filename):
             if not os.access(filename, os.R_OK):
-                print("\nError:", filename, "can't be read.\n")
+                print("\nError:", filename, "can't be read.\n", file=sys.stderr)
                 sys.exit(1)
         else:
-            print("\nError:", filename, "doesn't exist.\n")
+            print("\nError:", filename, "doesn't exist.\n", file=sys.stderr)
             sys.exit(1)
 
         self.width  = width
@@ -107,7 +107,7 @@ class YUVSource(VideoSource):
             self._file = open(filename, 'rb')
             fileSize   = os.path.getsize(filename)
         except IOError as e:
-            print("\nI/O error ({}): {}\n".format(e.errno, e.strerror))
+            print("\nI/O error ({}): {}\n".format(e.errno, e.strerror), file=sys.stderr)
             sys.exit(1)
 
         self.numFrames = fileSize // self._frameSizeInBytes
@@ -124,7 +124,7 @@ class YUVSource(VideoSource):
 
         if frame is not None:
             if (frame < 1) or (frame > self.numFrames):
-                print("\nError: frame number must be positive and not exceeding the number of frames in the input file.\n")
+                print("\nError: frame number must be positive and not exceeding the number of frames in the input file.\n", file=sys.stderr)
                 sys.exit(1)
 
             self.curFrame = frame - 1
@@ -156,7 +156,7 @@ class YUVSourceFFmpeg(VideoSource):
         self._debug = debug
         if self._debug:
             print("YUVSourceFFmpeg(): filename='{filename}', width={width}, height={height}, pix_fmt={pix_fmt}, depth={depth}, fps={fps}".format(
-                **locals()))
+                **locals()), file=sys.stderr)
 
         # rescale/convert frame rate using allowed FFmpeg parameters for pre-processing in pixel-based models
         vf_params = []
@@ -173,7 +173,7 @@ class YUVSourceFFmpeg(VideoSource):
         command.extend(['-'])
 
         if self._debug:
-            print("YUVSourceFFmpeg(): " + ' '.join(command))
+            print("YUVSourceFFmpeg(): " + ' '.join(command), file=sys.stderr)
 
         try:
             on_posix = 'posix' in sys.builtin_module_names
@@ -182,7 +182,7 @@ class YUVSourceFFmpeg(VideoSource):
             self._process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=self._frameSizeInBytes, close_fds=on_posix)
         except OSError as e:
             if e.errno == errno.ENOENT:
-                print("\nI/O error calling 'ffmpeg' to decode input video file/stream.\n")
+                print("\nI/O error calling 'ffmpeg' to decode input video file/stream.\n", file=sys.stderr)
                 sys.exit(1)
             else:
                 raise

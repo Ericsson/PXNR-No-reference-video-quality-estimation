@@ -59,28 +59,29 @@ p7zip-full`; macOS: `brew install p7zip`). The video (aggregation) model,
 # Usage
 
 Once the requirements above are in place, run the model from the directory
-containing the code. With no arguments it scores the bundled
-`BigBuckBunny_8s_clip.mp4`:
+containing the code, passing the video file to score as the first argument. The
+predicted MOS is printed as JSON on standard output; all progress and diagnostic
+messages go to standard error, so the two streams can be redirected separately:
 
 ```
-$ python3 PXNR-model.py
+$ python3 PXNR-model.py BigBuckBunny_8s_clip.mp4 --fps 30
 
-YUVSourceFFmpeg(): filename='./BigBuckBunny_8s_clip.mp4', width=3840, height=2160, pix_fmt=yuv422p, depth=8, fps=30
-YUVSourceFFmpeg(): ffmpeg -i ./BigBuckBunny_8s_clip.mp4 -filter:v scale=w=3840:h=2160,fps=30 -f image2pipe -c:v rawvideo -pix_fmt yuv422p -
+YUVSourceFFmpeg(): filename='.../BigBuckBunny_8s_clip.mp4', width=3840, height=2160, pix_fmt=yuv422p, depth=8, fps=30.0
+YUVSourceFFmpeg(): ffmpeg -i .../BigBuckBunny_8s_clip.mp4 -filter:v scale=w=3840:h=2160,fps=30.0 -f image2pipe -c:v rawvideo -pix_fmt yuv422p -
 ...
-Final ouput of ./BigBuckBunny_8s_clip.mp4 is
-MOS: [[2.558981]]
+MOS: 2.558981
+{"input": "BigBuckBunny_8s_clip.mp4", "fps": 30.0, "duration": 8.0, "mos": 2.558981}
 ```
 
-Some TensorFlow/CPU information and warnings are printed alongside this depending
-on your platform; they are harmless. Scoring a short clip takes several minutes
-on a CPU (see [GPU acceleration](#gpu-acceleration-nvidia) to speed this up).
+The `YUVSourceFFmpeg(...)`/`MOS:` lines and any TensorFlow/CPU information and
+warnings go to standard error and are harmless; only the final JSON line is
+written to standard output. Scoring a short clip takes several minutes on a CPU
+(see [GPU acceleration](#gpu-acceleration-nvidia) to speed this up).
 
-To score a different file with `PXNR-model.py`, edit the `video` path and the
-sample variables (frame rate, pixel format, duration) near the top of that file.
-Alternatively, `run_pxnr_on_file.py <path>` takes the video as an argument and
-reads the frame rate from a `_NNhz` tag in the filename — this is also the
-entry point used by the Docker image.
+By default the frame rate is read from a `_NNhz` tag in the filename (falling
+back to 60); override it with `--fps`, as above. `--duration` and `--pix-fmt`
+control the analysed length and the decode pixel format. Run
+`python3 PXNR-model.py --help` for the full list.
 
 # Docker
 
@@ -109,14 +110,13 @@ docker build -t pxnr .
 
 ### Running
 
-The image contains the code and the model coefficients but no test video, so mount the video you want to evaluate into the container and pass its path to `run_pxnr_on_file.py`:
+The image's entry point is the model itself, so mount the video you want to evaluate into the container and pass its path as the argument:
 
 ```
-docker run --rm -v "$PWD/BigBuckBunny_8s_clip.mp4:/data/in.mp4" pxnr \
-  python3 run_pxnr_on_file.py /data/in.mp4
+docker run --rm -v "$PWD/BigBuckBunny_8s_clip.mp4:/data/in.mp4" pxnr /data/in.mp4 --fps 30
 ```
 
-The predicted MOS is printed to the console (and also written to a text file in the working directory inside the container). As with the native version, inference runs on the CPU and takes several minutes even for a short clip. An image running under emulation, for example an amd64 image on an ARM host, will be slower still, so prefer a natively built image for real work.
+The predicted MOS is printed as JSON on standard output (`{"input": ..., "mos": ...}`); all progress and diagnostics go to standard error. As with the native version, inference runs on the CPU and takes several minutes even for a short clip. An image running under emulation, for example an amd64 image on an ARM host, will be slower still, so prefer a natively built image for real work.
 
 ### GPU acceleration (NVIDIA)
 
@@ -178,8 +178,7 @@ Then build and run the GPU image:
 
 ```
 ./build.sh gpu
-docker run --rm --gpus all -v "$PWD/BigBuckBunny_8s_clip.mp4:/data/in.mp4" pxnr:gpu \
-  python3 run_pxnr_on_file.py /data/in.mp4
+docker run --rm --gpus all -v "$PWD/BigBuckBunny_8s_clip.mp4:/data/in.mp4" pxnr:gpu /data/in.mp4 --fps 30
 ```
 
 # Notes

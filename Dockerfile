@@ -54,3 +54,9 @@ RUN cd /resources/model_coefficients && \
     rm -f image_model.h5.7z.*
 
 WORKDIR /resources/
+
+# The container is a single-purpose CLI: it runs PXNR on the video file passed
+# as a positional argument, e.g.
+#   docker run --rm -v "$PWD/clip.mp4:/data/in.mp4" pxnr /data/in.mp4
+# The predicted MOS is printed as JSON on stdout; all diagnostics go to stderr.
+ENTRYPOINT ["python3", "/resources/PXNR-model.py"]
