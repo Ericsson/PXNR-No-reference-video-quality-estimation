@@ -3,6 +3,7 @@ import sys
 import signal
 import subprocess
 import numpy as np
+import errno
 
 
 __author__    = "Sebastian Emmot, Maciej Pedzisz, David Lindero, Samuel Chambers"
@@ -36,10 +37,10 @@ class VideoSource:
 
         if os.path.exists(filename):
             if not os.access(filename, os.R_OK):
-                print("\nError:", filename, "can't be read.\n")
+                print("\nError:", filename, "can't be read.\n", file=sys.stderr)
                 sys.exit(1)
         else:
-            print("\nError:", filename, "doesn't exist.\n")
+            print("\nError:", filename, "doesn't exist.\n", file=sys.stderr)
             sys.exit(1)
 
         self.width  = width
@@ -106,7 +107,7 @@ class YUVSource(VideoSource):
             self._file = open(filename, 'rb')
             fileSize   = os.path.getsize(filename)
         except IOError as e:
-            print("\nI/O error ({}): {}\n".format(e.errno, e.strerror))
+            print("\nI/O error ({}): {}\n".format(e.errno, e.strerror), file=sys.stderr)
             sys.exit(1)
 
         self.numFrames = fileSize // self._frameSizeInBytes
@@ -123,7 +124,7 @@ class YUVSource(VideoSource):
 
         if frame is not None:
             if (frame < 1) or (frame > self.numFrames):
-                print("\nError: frame number must be positive and not exceeding the number of frames in the input file.\n")
+                print("\nError: frame number must be positive and not exceeding the number of frames in the input file.\n", file=sys.stderr)
                 sys.exit(1)
 
             self.curFrame = frame - 1
@@ -155,7 +156,7 @@ class YUVSourceFFmpeg(VideoSource):
         self._debug = debug
         if self._debug:
             print("YUVSourceFFmpeg(): filename='{filename}', width={width}, height={height}, pix_fmt={pix_fmt}, depth={depth}, fps={fps}".format(
-                **locals()))
+                **locals()), file=sys.stderr)
 
         # rescale/convert frame rate using allowed FFmpeg parameters for pre-processing in pixel-based models
         vf_params = []
@@ -172,14 +173,16 @@ class YUVSourceFFmpeg(VideoSource):
         command.extend(['-'])
 
         if self._debug:
-            print("YUVSourceFFmpeg(): " + ' '.join(command))
+            print("YUVSourceFFmpeg(): " + ' '.join(command), file=sys.stderr)
 
         try:
             on_posix = 'posix' in sys.builtin_module_names
-            self._process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=(10**8), close_fds=on_posix)
+            # One frame of pipe buffering is plenty; the previous 100 MB buffer
+            # was simply reserved RAM. Frames are pulled one at a time below.
+            self._process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=self._frameSizeInBytes, close_fds=on_posix)
         except OSError as e:
-            if e.errno == os.errno.ENOENT:
-                print("\nI/O error calling 'ffmpeg' to decode input video file/stream.\n")
+            if e.errno == errno.ENOENT:
+                print("\nI/O error calling 'ffmpeg' to decode input video file/stream.\n", file=sys.stderr)
                 sys.exit(1)
             else:
                 raise
@@ -204,6 +207,9 @@ class YUVSourceFFmpeg(VideoSource):
         if len(rawByteString) < self._frameSizeInBytes:
             return None
 
-        rawData = np.fromstring(rawByteString, dtype=np.uint16 if self.depth > 8 else np.uint8)
+        # np.frombuffer replaces the long-deprecated np.fromstring (removed in
+        # recent NumPy). The buffer is decoded read-only; reshapeFrame only
+        # views it and the colour conversion copies it, so this is safe.
+        rawData = np.frombuffer(rawByteString, dtype=np.uint16 if self.depth > 8 else np.uint8)
         self.curFrame += 1
         return self.reshapeFrame(rawData)

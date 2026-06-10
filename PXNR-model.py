@@ -1,70 +1,123 @@
-import numpy as np
-import tensorflow as tf
-from helperfunctions import frame_extraction, get_lr_metric
-from videosources import YUVSourceFFmpeg
+#!/usr/bin/env python3
+"""
+PXNR no-reference video quality estimation.
+
+Run the model on a single video file and print the predicted MOS as JSON on
+standard output. All progress and diagnostic messages go to standard error, so
+the standard output stream stays machine-readable (e.g. it can be piped into a
+file or another tool).
+
+Usage:
+    python3 PXNR-model.py path/to/video.mp4
+"""
+import argparse
+import json
+import os
+import re
+import sys
 
 __author__    = "Sebastian Emmot, Maciej Pedzisz, David Lindero, Samuel Chambers, Rohit Rentala"
 __contact__   = "david.lindero@ericsson.com"
 __copyright__ = "Copyright (c) 2018 Ericsson"
 __date__      = "2018-04-10"
-__status__    = "ITU-Submission ready, updated to Tensorflow 2.6"
+__status__    = "New runtime-method, updated to Tensorflow 2.18"
 
 
-"""
-Setting up constants
-"""
-video = './BigBuckBunny_8s_clip.mp4'
-image_model_location = "./model_coefficients/img_model-ep01-vloss40.883.hdf5"
-video_model_location = "./model_coefficients/noref_mostrained.hdf5"
+def eprint(*args, **kwargs):
+    """Print to standard error, keeping standard output reserved for JSON."""
+    print(*args, file=sys.stderr, **kwargs)
 
 
-"""
-Sample variables, should be extracted from input video file. One way to get this
-info is to run ffprobe on the video file first and parse the output manually.
-"""
-fps = 30  # frames per second
-full_pix_fmt = 'yuv422p'  # pixel format
-video_duration = 8.0  # in seconds
-
-depth = 8  # bits per pixel/channel
-if '10le' in full_pix_fmt:
-    depth = 10
-short_pixfmt = full_pix_fmt.split('p')[0][-3:]  # split 420 from yuv420p
+def extract_framerate(filename):
+    """Guess the frame rate from a '..._NNhz...' filename, defaulting to 60."""
+    match = re.search(r"_(\d+)hz", filename)
+    if match:
+        return int(match.group(1))
+    return 60
 
 
-"""
-Running Model 1, image model
-"""
-optimizer = tf.keras.optimizers.Adadelta()
-lr_rate_metric = get_lr_metric(optimizer)
-mapping = {"lr": lr_rate_metric}
-
-image_model = tf.keras.models.load_model(image_model_location, custom_objects=mapping)
-nr_frames_to_extract = 96
-
-predictions = []
-vsource = YUVSourceFFmpeg(video, 3840, 2160, fps, depth, short_pixfmt, True)
-
-nr_of_batches = 1  # this code was prepared to run for several batches as well, this is a remnant of that
-for ii in range(0, nr_of_batches):
-    frames = frame_extraction(vsource, fps, video_duration, depth, short_pixfmt, nr_frames_to_extract)
-    currpred = image_model.predict(frames, batch_size=8, verbose=0)
-
-    predictions.extend(currpred)
-
-    frames = []
-predictions = np.reshape(predictions, (nr_of_batches, nr_frames_to_extract, 85, 1))
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Estimate the no-reference video quality (MOS) of a video "
+                    "file. The result is printed as JSON on standard output; "
+                    "all progress and diagnostic messages go to standard error.")
+    parser.add_argument(
+        "input",
+        help="path to the input video file to evaluate")
+    parser.add_argument(
+        "--fps", type=float, default=None,
+        help="frame rate to sample the video at; by default this is taken from "
+             "a '_NNhz' marker in the filename, falling back to 60")
+    parser.add_argument(
+        "--duration", type=float, default=8.0,
+        help="duration in seconds to analyse (default: 8.0)")
+    parser.add_argument(
+        "--pix-fmt", default="yuv422p",
+        help="pixel format used for decoding (default: yuv422p)")
+    return parser.parse_args(argv)
 
 
-"""
-Running Model 2, aggregation model
-"""
-video_model = tf.keras.models.load_model(video_model_location)
+def main(argv=None):
+    args = parse_args(argv)
 
-all_video_predictions = []
-for ii in range(0, nr_of_batches):  # once again, several batches.
-    curr_pred = np.reshape(predictions[ii], (1, nr_frames_to_extract, 85, 1))
-    all_video_predictions.append(video_model.predict(curr_pred, verbose=1))
+    # Resolve the input to an absolute path before anything else, then run from
+    # the script's own directory so the relative model_coefficients/* paths
+    # resolve no matter where the command was invoked from.
+    video = os.path.abspath(args.input)
+    if not os.path.isfile(video):
+        eprint("Error: input file not found: {}".format(args.input))
+        return 1
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-final_pred = all_video_predictions[0]
-print('Final prediction of {video} is \nMOS: {final_pred}'.format(**locals()))
+    # Keep TensorFlow's own logging on stderr and a little quieter. Must be set
+    # before TensorFlow is imported.
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "1")
+
+    # Heavy imports are deferred until after argument parsing and input
+    # validation so that --help and a missing-file error stay fast and don't
+    # load TensorFlow or the model coefficients.
+    import tensorflow as tf
+    from helperfunctions import frame_extraction
+    from videosources import YUVSourceFFmpeg
+
+    fps = args.fps if args.fps is not None else extract_framerate(os.path.basename(video))
+    full_pix_fmt = args.pix_fmt
+    video_duration = args.duration
+
+    # 10-bit input (e.g. yuv420p10le) is scaled back to 8 bit during conversion.
+    depth = 10 if "10le" in full_pix_fmt else 8
+    short_pixfmt = full_pix_fmt.split("p")[0][-3:]  # e.g. 422 from yuv422p
+
+    video_model_location = "./model_coefficients/video_model.h5"
+    nr_frames_to_extract = 96
+
+    eprint("evaluating {} at {} fps over {}s".format(video, fps, video_duration))
+
+    # The input is decoded directly and scaled to 4K by YUVSourceFFmpeg, which
+    # runs the image (per-frame) model. A previous version re-encoded the input
+    # to lossless x265 first, but decoding that re-encode yields the exact same
+    # frames, so it only cost time, disk and encoder memory.
+    vsource = YUVSourceFFmpeg(video, 3840, 2160, fps, depth, short_pixfmt, True)
+    frame_predictions = frame_extraction(
+        vsource, fps, video_duration, depth, short_pixfmt, nr_frames_to_extract)
+
+    # Running the aggregation (video) model on the per-frame predictions.
+    video_model = tf.keras.models.load_model(video_model_location, compile=False)
+    final_pred = video_model.predict(frame_predictions, verbose=0)
+    mos = float(final_pred.reshape(-1)[0])
+
+    eprint("MOS: {}".format(mos))
+
+    result = {
+        "input": args.input,
+        "fps": fps,
+        "duration": video_duration,
+        "mos": mos,
+    }
+    json.dump(result, sys.stdout)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

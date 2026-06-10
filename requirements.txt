@@ -1,4 +1,21 @@
-scikit-image==0.18.3
-tensorflow==2.6.0
-numpy==1.19.5
-h5py==3.1.0
+# Python dependencies for PXNR.
+#
+# Plain `tensorflow` (NOT tensorflow[and-cuda]) is CPU-only and ships
+# wheels for both linux/amd64 and linux/arm64, so the same line works on
+# Intel and Apple-Silicon hosts. The CUDA packages stay behind the
+# optional `and-cuda` extra, so nothing heavy is pulled in.
+#
+# (On the legacy tensorflow/tensorflow base image used by Dockerfile_216
+# this version is already present, so pip treats the line as a no-op.)
+#
+# scikit-image provides the default (anti-aliased) resize in
+# matrix_utils.image_quadification(), matching the master branch behaviour.
+# NumPy and h5py come in transitively via TensorFlow.
+#
+# OpenCV is OPTIONAL: it is only used for the much faster -- but approximate --
+# resize path enabled with PXNR_FAST_RESIZE=area (which shifts the MOS by
+# ~0.07). The default path does not need it. The headless wheel pulls in no
+# GUI/X11 libraries.
+tensorflow==2.18.0
+scikit-image==0.26.0
+opencv-python-headless==4.13.0.92

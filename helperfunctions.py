@@ -1,7 +1,9 @@
 import math
 import numpy as np
 import matrix_utils
-
+import tensorflow as tf
+import time
+import h5py
 
 __author__    = "Sebastian Emmot, Maciej Pedzisz, David Lindero, Samuel Chambers"
 __contact__   = "david.lindero@ericsson.com"
@@ -24,11 +26,42 @@ stream. This function, together with the image_quadification function from matri
 also takes care of the scaling and splitting up of the full-resolution frames into subframes.
 """
 
-
 def get_lr_metric(optimizer):
     def lr(y_true, y_pred):
         return optimizer.lr
     return lr
+
+
+image_model_location = "./model_coefficients/image_model.h5"
+optimizer = tf.keras.optimizers.Adadelta()
+lr_rate_metric = get_lr_metric(optimizer)
+mapping = {"lr": lr_rate_metric}
+image_model = tf.keras.models.load_model(image_model_location, compile=False, custom_objects=mapping)
+
+# How many sub-frames to push through the image model at once. The convolutional
+# activations scale with this, and TensorFlow keeps its allocation pool at the
+# high-water mark, so this is the main knob for peak inference memory.
+#
+# On CPU/Docker a small batch keeps peak RAM down (4 is the memory-tuned
+# default). On a GPU the whole 85-subframe frame fits comfortably in a few
+# hundred MB of VRAM and a single large batch is markedly faster (fewer kernel
+# launches), so we default to 85 there. Either can be overridden with
+# PXNR_IMG_BATCH.
+import os
+_HAS_GPU = bool(tf.config.list_physical_devices("GPU"))
+IMG_BATCH = int(os.environ.get("PXNR_IMG_BATCH", "85" if _HAS_GPU else "4"))
+
+
+def _predict_image(frames):
+    """Run the image model over `frames` (N, 270, 480, 3).
+
+    Keras' predict() runs the forward pass inside an optimised tf.function that
+    releases convolutional activations between batches far better than repeated
+    eager model() calls do, so it both runs faster and peaks much lower. The
+    only knob we expose is the batch size, which caps how much activation memory
+    is live at once.
+    """
+    return image_model.predict(frames, batch_size=IMG_BATCH, verbose=0)
 
 
 def yuv2RGB(yuv, depth, pixfmt):
@@ -42,28 +75,38 @@ def yuv2RGB(yuv, depth, pixfmt):
 
     multdict = {411: (1, 4), 420: (2, 2), 410: (2, 4), 422: (1, 2), 444: (1, 1), 440: (2, 1)}
 
-    y = np.array(y, dtype=np.int64)
-    u = np.array(u, dtype=np.int64)
-    v = np.array(v, dtype=np.int64)
+    # All the arithmetic below is done in float32 rather than the previous
+    # int64/float64. The pixel values are small (0..255, or 0..1023 for 10-bit)
+    # so float32 has ample precision, and it halves the working set for the
+    # full-resolution colour planes, which dominate peak memory at 4K.
+    y = np.asarray(y, dtype=np.float32)
+    u = np.asarray(u, dtype=np.float32)
+    v = np.asarray(v, dtype=np.float32)
 
     if depth == 10:
         # scale to 8 bit
-        y = (y+2)/4
-        u = (u+2)/4
-        v = (v+2)/4
+        y = (y + 2) / 4
+        u = (u + 2) / 4
+        v = (v + 2) / 4
 
     u = u.repeat(multdict[pixfmt][0], axis=0).repeat(multdict[pixfmt][1], axis=1)
     v = v.repeat(multdict[pixfmt][0], axis=0).repeat(multdict[pixfmt][1], axis=1)
 
-    B = 1.164 * (y-16) + 2.018 * (u - 128)
-    G = 1.164 * (y-16) - 0.813 * (v - 128) - 0.391 * (u - 128)
-    R = 1.164 * (y-16) + 1.596*(v - 128)
+    yt = y - 16.0
+    ut = u - 128.0
+    vt = v - 128.0
 
-    R = R.clip(min=0.0, max=255.0)
-    G = G.clip(min=0.0, max=255.0)
-    B = B.clip(min=0.0, max=255.0)
+    B = 1.164 * yt + 2.018 * ut
+    G = 1.164 * yt - 0.813 * vt - 0.391 * ut
+    R = 1.164 * yt + 1.596 * vt
 
-    pix = np.dstack((R.astype(np.int32), G.astype(np.int32), B.astype(np.int32)))
+    # Write straight into a uint8 image (values are integers in 0..255 after the
+    # clip, so this is lossless) instead of building an int32 dstack. That is a
+    # 4x smaller output array and avoids three int32 temporaries.
+    pix = np.empty(R.shape + (3,), dtype=np.uint8)
+    pix[..., 0] = np.clip(R, 0.0, 255.0)
+    pix[..., 1] = np.clip(G, 0.0, 255.0)
+    pix[..., 2] = np.clip(B, 0.0, 255.0)
 
     return pix
 
@@ -81,6 +124,8 @@ def frame_extraction(video_object, extracted_fps, video_duration, depth, pixfmt,
     frameiter = 0
     nr_added_frames = 0
 
+    frame_predictions = []
+    beforetime = time.time()
     result = []
     while framesNeeded:
         yuv = video_object.loadFrame()
@@ -90,15 +135,24 @@ def frame_extraction(video_object, extracted_fps, video_duration, depth, pixfmt,
             rgb = yuv2RGB(yuv, depth, pixfmt)
             yuv = []
             # Creating all subframes for this full-size-image
-            result.extend(matrix_utils.image_quadification(rgb, quad_depth, "rgb", image_dims))
+            currquad = matrix_utils.image_quadification(rgb, quad_depth, "rgb", image_dims)
             rgb = []
+            reshaped_currquad = np.reshape(currquad, newshape=(num_slice_frames, 270, 480, 3))
+            currquad = None
+            predictions_for_currquad = _predict_image(reshaped_currquad)
+            reshaped_currquad = None
+            frame_predictions.extend(predictions_for_currquad)
             nr_added_frames += 1
+            # print('per frame time:')
+            # print(time.time()-beforetime)
+            beforetime = time.time()
 
         frameiter += 1
         if nr_added_frames == nr_frames_to_extract:
             yuv = []
             framesNeeded = False
             break
-    result = np.reshape(np.asarray(result), newshape=(nr_added_frames*num_slice_frames, 270, 480, 3))
 
-    return result
+    frame_pred_results = np.reshape(frame_predictions, (1, nr_frames_to_extract, 85, 1))
+
+    return frame_pred_results

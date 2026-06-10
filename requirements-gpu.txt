@@ -1,0 +1,17 @@
+# GPU dependencies for PXNR (NVIDIA / CUDA, linux/amd64 only).
+#
+# Use this INSTEAD of requirements.txt when you have an NVIDIA GPU and want the
+# image model to run on it. `tensorflow[and-cuda]` bundles the matching CUDA and
+# cuDNN runtime libraries as pip wheels, so the only host requirement is a
+# recent NVIDIA driver (no system CUDA toolkit needed). TensorFlow picks up the
+# GPU automatically; helperfunctions.py then defaults to a full 85-subframe
+# batch.
+#
+# This extra is published for linux/amd64 only -- there is no CUDA build for
+# arm64 / Apple Silicon, which is why it is kept separate from the portable
+# CPU requirements.txt.
+# opencv is only needed for the optional PXNR_FAST_RESIZE=area path; the default
+# anti-aliased resize uses scikit-image (see requirements.txt for details).
+tensorflow[and-cuda]==2.18.0
+scikit-image==0.26.0
+opencv-python-headless==4.13.0.92
