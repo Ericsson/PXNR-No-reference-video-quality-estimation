@@ -85,19 +85,12 @@ def main():
     nr_frames_to_extract = 96
     predictions = []
 
-    uuid_value = str(uuid.uuid4()).split('-')[0]
-    
-    # tmp_pvs_name = f'/tmp/{pvs_base_name}_{uuid_value}.mp4'
-
-    tempvideopath = f'/tmp/tempvideopath_{uuid_value}.mp4'
-    # cmd_line = f'ffmpeg -s 3840x2160 -r {fps} -pix_fmt {full_pix_fmt} -i {video} -c:v libx265 -x265-params lossless=1 -r {fps} {tempvideopath}'
-    cmd_line = f'ffmpeg -i {video} -c:v libx265 -x265-params lossless=1 -r {fps} {tempvideopath}'
-    print(cmd_line)
-    dec_ret, dec_out, dec_err = shell_call(cmd_line)
-    print(dec_ret, dec_out, dec_err)
-
     starttime_model = time.time()
-    vsource = YUVSourceFFmpeg(tempvideopath, 3840, 2160, fps, depth, short_pixfmt, True)
+    # The input is decoded directly and scaled to 4K by YUVSourceFFmpeg. A
+    # previous version re-encoded it to lossless x265 into /tmp first, but
+    # decoding that re-encode yields the exact same frames as decoding the
+    # original, so it only cost time, disk and a lot of encoder memory.
+    vsource = YUVSourceFFmpeg(video, 3840, 2160, fps, depth, short_pixfmt, True)
 
     nr_of_batches = 1  # this code was prepared to run for several batches as well, this is a remnant of that
     frame_predictions = frame_extraction(vsource, fps, video_duration, depth, short_pixfmt, nr_frames_to_extract)

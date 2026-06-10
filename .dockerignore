@@ -1,0 +1,16 @@
+# Keep the build context small: none of this is needed inside the image.
+.venv*
+venv
+env
+__pycache__
+*.pyc
+bench.py
+*.txt.txt
+
+# The image model is unpacked from the split 7z archive during the build, so the
+# locally-extracted copy and any temporary single-file archive must not be sent.
+model_coefficients/image_model.h5
+model_coefficients/image_model.h5.7z
+
+.git
+Upgrade report

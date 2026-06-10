@@ -177,7 +177,9 @@ class YUVSourceFFmpeg(VideoSource):
 
         try:
             on_posix = 'posix' in sys.builtin_module_names
-            self._process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=(10**8), close_fds=on_posix)
+            # One frame of pipe buffering is plenty; the previous 100 MB buffer
+            # was simply reserved RAM. Frames are pulled one at a time below.
+            self._process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=self._frameSizeInBytes, close_fds=on_posix)
         except OSError as e:
             if e.errno == errno.ENOENT:
                 print("\nI/O error calling 'ffmpeg' to decode input video file/stream.\n")
@@ -205,6 +207,9 @@ class YUVSourceFFmpeg(VideoSource):
         if len(rawByteString) < self._frameSizeInBytes:
             return None
 
-        rawData = np.fromstring(rawByteString, dtype=np.uint16 if self.depth > 8 else np.uint8)
+        # np.frombuffer replaces the long-deprecated np.fromstring (removed in
+        # recent NumPy). The buffer is decoded read-only; reshapeFrame only
+        # views it and the colour conversion copies it, so this is safe.
+        rawData = np.frombuffer(rawByteString, dtype=np.uint16 if self.depth > 8 else np.uint8)
         self.curFrame += 1
         return self.reshapeFrame(rawData)

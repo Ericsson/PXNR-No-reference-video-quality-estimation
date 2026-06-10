@@ -57,7 +57,9 @@ def image_quadification(nd_image, depth=1, color_space='rgb', image_dims=(216, 3
         resized = transform.resize(nd_image, image_dims, mode='constant', preserve_range=True).astype(dtype)
 
         frames = int(sum(math.pow(4, k) for k in range(0, depth+1)))
-        resized_stack = np.empty(shape=(frames,)+image_dims+(3,))
+        # float32 stack (was float64): the image model runs in float32 anyway,
+        # so this halves the largest per-frame array with no effect on results.
+        resized_stack = np.empty(shape=(frames,)+image_dims+(3,), dtype=dtype)
 
         count = 0
         resized_stack[count] = resized
@@ -74,5 +76,6 @@ def image_quadification(nd_image, depth=1, color_space='rgb', image_dims=(216, 3
                 count += 1
             slice_list = []
 
-        resized_stack = np.asarray(resized_stack)/255
+        # normalise in place to avoid allocating a second full-size copy.
+        resized_stack /= 255.0
         return resized_stack
