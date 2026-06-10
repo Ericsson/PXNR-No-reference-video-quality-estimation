@@ -5,34 +5,86 @@ The code herein is a sample implementation of the Ericsson submission to the ITU
 
 See the ./licenses/ directory for individual license files for this software together with used and referenced libraries and modules.
 
+# Requirements
+
+To run the model natively you need a Python environment, FFmpeg, the Python
+libraries listed below, and the (compressed) model coefficients unpacked. If you
+would rather not install any of this by hand, skip to the [Docker](#docker)
+section, which bundles everything into a container.
+
+### Python
+
+Python **3.9–3.12** (64-bit). The pinned TensorFlow 2.18 only publishes wheels
+for that range; 3.12 is what the current code is tested on. The original
+competition code ran on 3.5 and has also been run on 3.6 and 3.8.
+
+### FFmpeg
+
+`ffmpeg` and `ffprobe` must be installed and on your `PATH` — they decode and
+probe the input video. Check with `ffmpeg -version`. The code has been used with
+FFmpeg 3.2.2, 4.1.1, 4.4 and 8.1; any reasonably recent build works.
+
+### Python libraries
+
+Install them with pip (a virtual environment is recommended):
+
+```
+pip install -r requirements.txt
+```
+
+This pulls in TensorFlow 2.18, scikit-image (the default anti-aliased resize) and
+OpenCV (only used by the optional `PXNR_FAST_RESIZE=area` fast path). NumPy and
+h5py come in transitively via TensorFlow.
+
+To run the image model on an **NVIDIA GPU**, install `requirements-gpu.txt`
+instead — see [GPU acceleration](#gpu-acceleration-nvidia) for details and the
+expected speed-up.
+
+### Model coefficients
+
+The image-model weights are checked in as a split 7-Zip archive to keep the file
+sizes manageable. Before the first run, unpack them so that `image_model.h5` sits
+next to the archive parts in `model_coefficients/`:
+
+```
+cd model_coefficients
+7z x image_model.h5.7z.001      # reads .001 and .002, writes image_model.h5
+cd ..
+```
+
+`7z` comes from the `p7zip-full` package (Debian/Ubuntu: `sudo apt install
+p7zip-full`; macOS: `brew install p7zip`). The video (aggregation) model,
+`video_model.h5`, is small and already uncompressed, so it needs no extraction.
+
 # Usage
 
-First, install the prerequisites. Python3, FFmpeg and the necessary libraries and modules are listed below.
-
-Uncompress the 7zip-archive img_model-ep01-vloss40.883.hdf5.7z.001 and .002 of the model coefficients located in the model_coefficients-directory. The resulting file, img_model-ep01-vloss40.883.hdf5, should be located next to the 7z-archive for the code to work.
-
-After you have verified that everything has been installed properly, open a command line terminal on your platform and browse to the directory containing the
-code. The model will run on the supplied .mp4-file and will produce an output that looks like this, together with some warnings depending on your platform etc:
-
+Once the requirements above are in place, run the model from the directory
+containing the code. With no arguments it scores the bundled
+`BigBuckBunny_8s_clip.mp4`:
 
 ```
 $ python3 PXNR-model.py
 
-2019-11-19 11:26:21.772936: I tensorflow/core/platform/cpu_feature_guard.cc:137] Your CPU supports instructions that this TensorFlow binary was not compiled to use: SSE4.1 SSE4.2 AVX AVX2 FMA
 YUVSourceFFmpeg(): filename='./BigBuckBunny_8s_clip.mp4', width=3840, height=2160, pix_fmt=yuv422p, depth=8, fps=30
 YUVSourceFFmpeg(): ffmpeg -i ./BigBuckBunny_8s_clip.mp4 -filter:v scale=w=3840:h=2160,fps=30 -f image2pipe -c:v rawvideo -pix_fmt yuv422p -
-/lib/python3.5/site-packages/skimage/transform/_warps.py:110: UserWarning: Anti-aliasing will be enabled by default in skimage 0.15 to avoid aliasing artifacts when down-sampling images.
-  warn("Anti-aliasing will be enabled by default in skimage 0.15 to "
-1/1 [==============================] - 0s
-Final prediction of ./BigBuckBunny_8s_clip.mp4 is
-MOS: [[2.515198]]
+...
+Final ouput of ./BigBuckBunny_8s_clip.mp4 is
+MOS: [[2.558981]]
 ```
 
-If you want to run it on another video file, add the path and proper sample variables in the `PXNR-model.py` file.
+Some TensorFlow/CPU information and warnings are printed alongside this depending
+on your platform; they are harmless. Scoring a short clip takes several minutes
+on a CPU (see [GPU acceleration](#gpu-acceleration-nvidia) to speed this up).
+
+To score a different file with `PXNR-model.py`, edit the `video` path and the
+sample variables (frame rate, pixel format, duration) near the top of that file.
+Alternatively, `run_pxnr_on_file.py <path>` takes the video as an argument and
+reads the frame rate from a `_NNhz` tag in the filename — this is also the
+entry point used by the Docker image.
 
 # Docker
 
-A containerised version is provided that bundles Python, TensorFlow, FFmpeg and the model coefficients, so you do not have to install any of the prerequisites listed below by hand. The image is multi-platform and builds natively on both Intel/AMD (`linux/amd64`) and ARM, including Apple Silicon (`linux/arm64`).
+A containerised version is provided that bundles Python, TensorFlow, FFmpeg and the model coefficients, so you do not have to install any of the [requirements](#requirements) by hand. The image is multi-platform and builds natively on both Intel/AMD (`linux/amd64`) and ARM, including Apple Silicon (`linux/arm64`).
 
 The official `tensorflow/tensorflow` image is only published for amd64, so the container is instead based on the multi-architecture `python:3.12-slim` image, with TensorFlow installed from PyPI. FFmpeg comes from the static GPL builds by BtbN; the correct build is selected automatically for the target architecture.
 
@@ -46,17 +98,10 @@ To build for the architecture of your own machine and load the image into your l
 ./build.sh
 ```
 
-This produces an image tagged `pxnr:latest`.
+This produces an image tagged `pxnr:latest`. The first run creates a
+`pxnr-multiarch` BuildKit builder that is reused afterwards.
 
-To build a combined amd64 and arm64 image and push it to a registry, pass `push` and an image reference. A multi-architecture image cannot be loaded into the local Docker store, so it has to be pushed:
-
-```
-./build.sh push ghcr.io/your-org/pxnr:latest
-```
-
-The first run creates a `pxnr-multiarch` BuildKit builder that is reused afterwards.
-
-If you only need a single-architecture image for your own machine, you can also build it directly without the script:
+You can also build it directly without the helper script:
 
 ```
 docker build -t pxnr .
@@ -137,32 +182,26 @@ docker run --rm --gpus all -v "$PWD/BigBuckBunny_8s_clip.mp4:/data/in.mp4" pxnr:
   python3 run_pxnr_on_file.py /data/in.mp4
 ```
 
-# Prerequisites
+# Notes
 
-This code has been run, as is, on Mac OS and Ubuntu, producing identical results. FFmpeg, Python and associated libraries have not been included here in this repository and must be installed separately. The model itself can work with other decoders as long as the pictures from the video can be read as arrays using yuv or rgb pixel formats. The user has to modify the code on their own if the use case is anything other than what has been shown in the included example.
+This code has been run, as is, on macOS and Ubuntu, producing identical results.
+The model can work with other decoders as long as the frames can be read as
+arrays in a YUV or RGB pixel format; the user has to adapt the code for any use
+case other than the included example.
 
-### Python
-
-Python3 has been used when developing and running the models herein. The version supplied with the model in the competition was 3.5, but this has been tested with 3.6, 3.8 and 3.12 giving the same results. The updated tensorflow 2 version has only been tested with 3.8+.
-
-These are the modules and versions that were used when running the code originally.
-
-* scikit-image==0.18.3
-* tensorflow==2.6.0
-* numpy==1.19.5
-* h5py==3.1.0
-
-### FFmpeg
-
-This code has been tested with FFmpeg version 3.2.2, 4.1.1, 4.4, and 8.1. The FFmpeg executeable must be included in the path variable for this code to run. Try running `ffmpeg -h` in a terminal, on your device, to see if you have the application in your path.
-
-### Big Buck Bunny clip
-
-The included and heavily encoded video file is an 8s clip taken from the Big Buck Bunny movie, created by the Blender organization. The source material can be found on www.blender.org.
+The bundled `BigBuckBunny_8s_clip.mp4` is a heavily encoded 8 s clip from the Big
+Buck Bunny movie by the Blender organization. The source material can be found at
+www.blender.org.
 
 # Upgrade
 
-This repository was upgraded from tensorflow 1.4.1 to 2.6.0. To verify that this did not change the behavior of the model, a number of tests and comparisons was performed. No difference was found on the MOS level and only negligible differences where found on the interim predictions. See a more detailed report in the "Upgrade report"-directory.
+This repository was upgraded from TensorFlow 1.4.1 to 2.6.0, and later to 2.18.
+To verify that this did not change the behavior of the model, a number of tests
+and comparisons were performed. No difference was found on the MOS level and only
+negligible differences on the interim predictions. See the detailed report in the
+"Upgrade report" directory. The module versions used when the code originally ran
+were `tensorflow==2.6.0`, `scikit-image==0.18.3`, `numpy==1.19.5` and
+`h5py==3.1.0`; the current pinned versions are in `requirements.txt`.
 
 ### Resize
 
