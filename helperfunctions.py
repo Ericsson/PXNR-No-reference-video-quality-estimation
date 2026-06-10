@@ -40,10 +40,16 @@ image_model = tf.keras.models.load_model(image_model_location, compile=False, cu
 
 # How many sub-frames to push through the image model at once. The convolutional
 # activations scale with this, and TensorFlow keeps its allocation pool at the
-# high-water mark, so this is the main knob for peak inference memory. 8 was the
-# old hard-coded value; a smaller batch trades a little speed for a lot less RAM.
+# high-water mark, so this is the main knob for peak inference memory.
+#
+# On CPU/Docker a small batch keeps peak RAM down (4 is the memory-tuned
+# default). On a GPU the whole 85-subframe frame fits comfortably in a few
+# hundred MB of VRAM and a single large batch is markedly faster (fewer kernel
+# launches), so we default to 85 there. Either can be overridden with
+# PXNR_IMG_BATCH.
 import os
-IMG_BATCH = int(os.environ.get("PXNR_IMG_BATCH", "4"))
+_HAS_GPU = bool(tf.config.list_physical_devices("GPU"))
+IMG_BATCH = int(os.environ.get("PXNR_IMG_BATCH", "85" if _HAS_GPU else "4"))
 
 
 def _predict_image(frames):

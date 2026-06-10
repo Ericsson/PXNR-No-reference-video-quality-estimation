@@ -8,7 +8,14 @@
 # (On the legacy tensorflow/tensorflow base image used by Dockerfile_216
 # this version is already present, so pip treats the line as a no-op.)
 #
-# scikit-image is used by matrix_utils.image_quadification() for frame
-# resizing. NumPy and h5py come in transitively via TensorFlow.
+# scikit-image provides the default (anti-aliased) resize in
+# matrix_utils.image_quadification(), matching the master branch behaviour.
+# NumPy and h5py come in transitively via TensorFlow.
+#
+# OpenCV is OPTIONAL: it is only used for the much faster -- but approximate --
+# resize path enabled with PXNR_FAST_RESIZE=area (which shifts the MOS by
+# ~0.07). The default path does not need it. The headless wheel pulls in no
+# GUI/X11 libraries.
 tensorflow==2.18.0
 scikit-image==0.26.0
+opencv-python-headless==4.13.0.92

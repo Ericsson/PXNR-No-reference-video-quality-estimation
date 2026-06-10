@@ -6,6 +6,12 @@
 #                                 it into local Docker. Run it with:
 #                                     docker run --rm pxnr ...
 #
+#   ./build.sh gpu                Build the NVIDIA/CUDA image (linux/amd64 only)
+#                                 and load it locally as pxnr:gpu. Run it with:
+#                                     docker run --rm --gpus all pxnr:gpu ...
+#                                 Requires the NVIDIA Container Toolkit on the
+#                                 host (see README, "Docker GPU").
+#
 #   ./build.sh push <image-ref>   Build a multi-arch image (linux/amd64 +
 #                                 linux/arm64) and push it to a registry, e.g.
 #                                     ./build.sh push ghcr.io/aveq/pxnr:latest
@@ -27,7 +33,12 @@ if ! docker buildx inspect "$BUILDER" >/dev/null 2>&1; then
     docker buildx create --name "$BUILDER" --driver docker-container --bootstrap >/dev/null
 fi
 
-if [[ "${1:-}" == "push" ]]; then
+if [[ "${1:-}" == "gpu" ]]; then
+    echo ">> building linux/amd64 GPU image and loading into local Docker as pxnr:gpu"
+    docker buildx build --builder "$BUILDER" \
+        --platform linux/amd64 \
+        -f "Dockerfile.gpu" -t "pxnr:gpu" --load .
+elif [[ "${1:-}" == "push" ]]; then
     REF="${2:?usage: ./build.sh push <image-ref>}"
     echo ">> building multi-arch (linux/amd64 + linux/arm64) and pushing to $REF"
     docker buildx build --builder "$BUILDER" \
